@@ -7,6 +7,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'chat_message.dart';
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key key}) : super(key: key);
 
@@ -16,13 +18,16 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   User _currentUser;
+  bool _isLoading = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void initState() {
     super.initState();
 
     FirebaseAuth.instance.authStateChanges().listen((user) {
-      _currentUser = user;
+      setState(() {
+        _currentUser = user;
+      });
     });
   }
 
@@ -64,7 +69,8 @@ class _ChatScreenState extends State<ChatScreen> {
     Map<String, dynamic> data = {
       "uid": user.uid,
       "senderName": user.displayName,
-      "senderPhotoUrl": user.photoURL
+      "senderPhotoUrl": user.photoURL,
+      "time": Timestamp.now(),
     };
 
     if (imgFile != null) {
@@ -74,8 +80,17 @@ class _ChatScreenState extends State<ChatScreen> {
           .ref()
           .child(DateTime.now().microsecondsSinceEpoch.toString())
           .putFile(file);
+
+      setState(() {
+        _isLoading = true;
+      });
+
       String url = await task.ref.getDownloadURL();
       data['imgUrl'] = url;
+
+      setState(() {
+        _isLoading = false;
+      });
     }
 
     if (text != null) data['text'] = text;
@@ -88,15 +103,34 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text("chat flutter"),
+        title: Text(
+          _currentUser != null
+              ? 'Olá, ${_currentUser.displayName}'
+              : 'Chat App',
+        ),
+        centerTitle: true,
         elevation: 0,
+        actions: [
+          _currentUser != null
+              ? IconButton(
+                  icon: const Icon(Icons.exit_to_app),
+                  onPressed: () {
+                    FirebaseAuth.instance.signOut();
+                    GoogleSignIn().signOut();
+                    SnackBar(content: Text("Você saiu com sucesso."));
+                  },
+                )
+              : Container(),
+        ],
       ),
       body: Column(
         children: <Widget>[
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance.collection('messages').snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('messages')
+                  .orderBy('time')
+                  .snapshots(),
               builder: (context, snapshot) {
                 switch (snapshot.connectionState) {
                   case ConnectionState.none:
@@ -110,8 +144,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       itemCount: documents.length,
                       reverse: true,
                       itemBuilder: (context, index) {
-                        return ListTile(
-                          title: Text(documents[index]['text']),
+                        return ChatMessage(
+                          documents[index]['text'],
+                          documents[index]['uid'] == _currentUser?.uid,
                         );
                       },
                     );
@@ -119,6 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          _isLoading ? LinearProgressIndicator() : Container(),
           TextComposer(_sendMessage),
         ],
       ),
