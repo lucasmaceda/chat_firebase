@@ -78,7 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       TaskSnapshot task = await FirebaseStorage.instance
           .ref()
-          .child(DateTime.now().microsecondsSinceEpoch.toString())
+          .child(user.uid + DateTime.now().microsecondsSinceEpoch.toString())
           .putFile(file);
 
       setState(() {
